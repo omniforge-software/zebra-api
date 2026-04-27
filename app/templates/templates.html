@@ -28,21 +28,166 @@
       </tbody>
     </table>
   </section>
-  <section class="panel">
-    <h2>Create Template</h2>
-    <form method="post" action="/admin/templates">
-      <label for="name">Name</label>
-      <input id="name" name="name" required placeholder="ops-test-label">
-      <label for="description">Description</label>
-      <input id="description" name="description" placeholder="Short internal note">
-      <label for="zpl_body">ZPL</label>
-      <textarea id="zpl_body" name="zpl_body" required>^XA
+
+  <section>
+    <div class="panel" style="margin-bottom:16px">
+      <h2>Create Template</h2>
+      <form method="post" action="/admin/templates" id="create-form">
+        <label for="name">Name</label>
+        <input id="name" name="name" required placeholder="ops-test-label">
+        <label for="description">Description</label>
+        <input id="description" name="description" placeholder="Short internal note">
+        <label for="zpl_body">ZPL</label>
+        <textarea id="zpl_body" name="zpl_body" required>^XA
 ^CF0,35
-^FO30,40^FD{{ title }}^FS
-^FO30,90^FD{{ message }}^FS
+^FO30,40^FD{{title}}^FS
+^FO30,90^FD{{message}}^FS
 ^XZ</textarea>
-      <button type="submit">Create Template</button>
-    </form>
+        <button type="submit">Create Template</button>
+        <button type="button" class="secondary" id="preview-btn" style="margin-left:8px">Preview</button>
+      </form>
+    </div>
+
+    <div class="panel" id="preview-panel" style="display:none">
+      <h2>Preview</h2>
+      <div id="preview-vars" style="margin-bottom:12px"></div>
+      <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
+        <div style="flex:1;min-width:220px">
+          <label style="margin-top:0">Rendered ZPL</label>
+          <pre id="preview-zpl" style="background:#eef1f4;padding:10px;border-radius:6px;font-size:12px;overflow:auto;max-height:280px;white-space:pre-wrap;word-break:break-all"></pre>
+          <p id="preview-error" class="bad" style="display:none"></p>
+        </div>
+        <div style="flex:0 0 auto;text-align:center">
+          <label style="margin-top:0">Label image <span class="muted">(via Labelary)</span></label>
+          <img id="preview-img" src="" alt="Label preview" style="display:none;border:1px solid var(--line);border-radius:6px;max-width:300px">
+          <p id="preview-img-note" class="muted" style="font-size:12px;margin:4px 0 0"></p>
+        </div>
+      </div>
+    </div>
   </section>
 </div>
+
+<script>
+(function () {
+  const zplEl   = document.getElementById('zpl_body');
+  const btn     = document.getElementById('preview-btn');
+  const panel   = document.getElementById('preview-panel');
+  const varsEl  = document.getElementById('preview-vars');
+  const zplOut  = document.getElementById('preview-zpl');
+  const errEl   = document.getElementById('preview-error');
+  const img     = document.getElementById('preview-img');
+  const imgNote = document.getElementById('preview-img-note');
+
+  const PLACEHOLDER = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g;
+
+  function extractVars(zpl) {
+    const found = new Set();
+    let m;
+    PLACEHOLDER.lastIndex = 0;
+    while ((m = PLACEHOLDER.exec(zpl)) !== null) found.add(m[1]);
+    return [...found];
+  }
+
+  function buildVarInputs(vars) {
+    varsEl.innerHTML = '';
+    if (!vars.length) return;
+    const heading = document.createElement('p');
+    heading.style.cssText = 'font-size:13px;color:var(--muted);margin:0 0 8px';
+    heading.textContent = 'Fill in variables for preview:';
+    varsEl.appendChild(heading);
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:10px';
+    vars.forEach(v => {
+      const wrap = document.createElement('div');
+      const lbl = document.createElement('label');
+      lbl.textContent = v;
+      lbl.style.marginTop = '0';
+      const inp = document.createElement('input');
+      inp.dataset.var = v;
+      inp.placeholder = v;
+      inp.value = 'TEST ' + v;
+      wrap.appendChild(lbl);
+      wrap.appendChild(inp);
+      grid.appendChild(wrap);
+    });
+    varsEl.appendChild(grid);
+  }
+
+  function labelaryUrl(zpl) {
+    // Extract ^PW (print width dots) and ^LL (label length dots) for dimensions
+    const pw = (zpl.match(/\^PW(\d+)/i) || [])[1];
+    const ll = (zpl.match(/\^LL(\d+)/i) || [])[1];
+    const dpmm = 8; // 203 dpi
+    const w = pw ? (parseInt(pw) / (dpmm * 25.4)).toFixed(2) : '4.00';
+    const h = ll ? (parseInt(ll) / (dpmm * 25.4)).toFixed(2) : '6.00';
+    return `https://api.labelary.com/v1/printers/${dpmm}dpmm/labels/${w}x${h}/0/`;
+  }
+
+  async function runPreview() {
+    const zpl = zplEl.value.trim();
+    if (!zpl) return;
+    panel.style.display = '';
+
+    const vars = extractVars(zpl);
+    buildVarInputs(vars);
+
+    const variables = {};
+    varsEl.querySelectorAll('input[data-var]').forEach(i => { variables[i.dataset.var] = i.value; });
+
+    // Render via our API
+    let rendered = null;
+    try {
+      const res = await fetch('/admin/templates/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ zpl_body: zpl, variables })
+      });
+      const data = await res.json();
+      if (data.error) {
+        errEl.textContent = data.error;
+        errEl.style.display = '';
+        zplOut.textContent = '';
+        img.style.display = 'none';
+        return;
+      }
+      errEl.style.display = 'none';
+      rendered = data.rendered;
+      zplOut.textContent = rendered;
+    } catch (e) {
+      errEl.textContent = 'Preview request failed: ' + e;
+      errEl.style.display = '';
+      return;
+    }
+
+    // Visual preview via Labelary (requires internet)
+    const url = labelaryUrl(rendered);
+    imgNote.textContent = 'Loading…';
+    img.style.display = 'none';
+    try {
+      const lRes = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'data=' + encodeURIComponent(rendered)
+      });
+      if (lRes.ok) {
+        const blob = await lRes.blob();
+        img.src = URL.createObjectURL(blob);
+        img.style.display = 'block';
+        imgNote.textContent = '';
+      } else {
+        imgNote.textContent = 'Labelary unavailable (no internet or rate limited)';
+      }
+    } catch {
+      imgNote.textContent = 'Labelary unavailable (no internet access from browser)';
+    }
+  }
+
+  btn.addEventListener('click', runPreview);
+
+  // Re-run preview when variable inputs change (after first open)
+  varsEl.addEventListener('input', () => {
+    if (panel.style.display !== 'none') runPreview();
+  });
+})();
+</script>
 {% endblock %}
