@@ -37,15 +37,20 @@ def decode_admin_token(token: str) -> str | None:
 
 
 if __name__ == "__main__":
-    import getpass
     import sys
 
     print("Zebra API — admin password setup")
     print("  Press Enter to auto-generate a secure password, or type one now.")
 
-    # getpass hides the input; we still want the "just press Enter" UX
+    # getpass reads /dev/tty directly and blocks in non-interactive contexts (tests, pipes).
+    # Fall back to plain stdin.readline() when stdin is not a TTY.
     try:
-        password = getpass.getpass("Password (leave blank to generate): ").strip()
+        if sys.stdin.isatty():
+            import getpass
+            password = getpass.getpass("Password (leave blank to generate): ").strip()
+        else:
+            print("Password (leave blank to generate): ", end="", flush=True)
+            password = sys.stdin.readline().strip()
     except (KeyboardInterrupt, EOFError):
         sys.exit(0)
 
