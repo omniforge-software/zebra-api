@@ -50,10 +50,28 @@ async def refresh_printer_status(printer_id: str) -> dict:
             raise ValueError("Printer not found")
         status: dict[str, str | bool] = {"online": False}
         try:
-            for var in ["device.product_name", "device.friendly_name", "device.status", "media.status"]:
+            sgd_map = {
+                "device.product_name": "product_name",
+                "device.friendly_name": "friendly_name",
+                "device.status": None,
+                "media.status": None,
+                "ezpl.print_width": "print_width",
+                "ezpl.label_length": "label_length",
+                "media.type": "media_type",
+                "media.out": None,
+                "odometer.total_label_count": "odometer",
+            }
+            for var, field in sgd_map.items():
                 value = await query_sgd(printer.ip, var)
                 if value:
-                    status[var] = value.strip().strip('"')
+                    cleaned = value.strip().strip('"')
+                    status[var] = cleaned
+                    if field:
+                        setattr(printer, field, cleaned)
+            # Normalise media_out to bool and store
+            raw_out = status.get("media.out", "")
+            printer.media_out = raw_out.lower() == "yes"
+            status["media_out"] = printer.media_out
             status["online"] = True
             printer.is_online = True
             printer.last_seen_at = datetime.now(timezone.utc)

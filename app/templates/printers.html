@@ -5,7 +5,22 @@
   <form method="post" action="/admin/printers/scan"><button type="submit">Scan Network</button></form>
 </div>
 <table>
-  <thead><tr><th>Name</th><th>Alias</th><th>IP</th><th>Model</th><th>Firmware</th><th>Ports</th><th>Status</th><th>Actions</th></tr></thead>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Alias</th>
+      <th>IP</th>
+      <th>Model</th>
+      <th>Firmware</th>
+      <th>Print Width</th>
+      <th>Label Length</th>
+      <th>Media Type</th>
+      <th>Media</th>
+      <th>Odometer</th>
+      <th>Status</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
   <tbody>
   {% for printer in printers %}
     <tr>
@@ -19,12 +34,28 @@
       <td><code>{{ printer.ip }}</code></td>
       <td>{{ printer.product_name or "" }}</td>
       <td>{{ printer.firmware or "" }}</td>
-      <td>{{ printer.ports_open }}</td>
+      <td>{{ printer.print_width or "—" }}</td>
+      <td>{{ printer.label_length or "—" }}</td>
+      <td>{{ printer.media_type or "—" }}</td>
+      <td>
+        {% if printer.media_out == true %}
+          <span class="bad">OUT</span>
+        {% elif printer.media_out == false %}
+          <span class="ok">OK</span>
+        {% else %}
+          <span class="muted">—</span>
+        {% endif %}
+      </td>
+      <td>{{ printer.odometer or "—" }}</td>
       <td>{% if printer.is_online %}<span class="ok">online</span>{% else %}<span class="bad">offline</span>{% endif %}</td>
-      <td><form method="post" action="/admin/printers/{{ printer.id }}/status"><button class="secondary" type="submit">Refresh</button></form></td>
+      <td>
+        <form method="post" action="/admin/printers/{{ printer.id }}/status">
+          <button class="secondary" type="submit">Refresh</button>
+        </form>
+      </td>
     </tr>
   {% else %}
-    <tr><td colspan="8" class="muted">No printers found yet.</td></tr>
+    <tr><td colspan="12" class="muted">No printers found yet.</td></tr>
   {% endfor %}
   </tbody>
 </table>

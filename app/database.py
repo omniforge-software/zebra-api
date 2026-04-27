@@ -48,3 +48,27 @@ def init_db() -> None:
     import app.database as _self
 
     Base.metadata.create_all(bind=_self.engine)
+    _migrate(_self.engine)
+
+
+# Columns added after initial release — ALTER TABLE IF NOT EXISTS is not
+# supported in all SQLite versions, so we check the existing columns first.
+_PRINTER_MIGRATIONS: list[tuple[str, str]] = [
+    ("label_length", "VARCHAR(50)"),
+    ("media_type",   "VARCHAR(50)"),
+    ("media_out",    "BOOLEAN"),
+    ("odometer",     "VARCHAR(50)"),
+]
+
+
+def _migrate(eng) -> None:
+    """Apply additive schema changes that create_all won't handle."""
+    with eng.connect() as conn:
+        existing = {
+            row[1]
+            for row in conn.exec_driver_sql("PRAGMA table_info(printers)").fetchall()
+        }
+        for col, col_type in _PRINTER_MIGRATIONS:
+            if col not in existing:
+                conn.exec_driver_sql(f"ALTER TABLE printers ADD COLUMN {col} {col_type}")
+        conn.commit()

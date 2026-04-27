@@ -11,6 +11,10 @@ class PrinterOut(BaseModel):
     product_name: str | None = None
     firmware: str | None = None
     print_width: str | None = None
+    label_length: str | None = None
+    media_type: str | None = None
+    media_out: bool | None = None
+    odometer: str | None = None
     ports_open: list[int]
     is_online: bool
 

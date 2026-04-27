@@ -77,6 +77,10 @@ async def fingerprint_printer(ip: str, ports_open: list[int]) -> dict:
         "device.friendly_name": "friendly_name",
         "device.product_name": "product_name",
         "ezpl.print_width": "print_width",
+        "ezpl.label_length": "label_length",
+        "media.type": "media_type",
+        "media.out": "_media_out_raw",
+        "odometer.total_label_count": "odometer",
     }.items():
         try:
             value = await query_sgd(ip, var)
@@ -84,6 +88,12 @@ async def fingerprint_printer(ip: str, ports_open: list[int]) -> dict:
                 info[field] = value.strip().strip('"')
         except Exception:
             pass
+
+    # Normalise media_out to a bool
+    raw = info.pop("_media_out_raw", None)
+    if raw is not None:
+        info["media_out"] = raw.lower() == "yes"
+
     return info
 
 
