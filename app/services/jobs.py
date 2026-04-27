@@ -54,22 +54,37 @@ async def refresh_printer_status(printer_id: str) -> dict:
                 "device.product_name": "product_name",
                 "device.friendly_name": "friendly_name",
                 "device.status": None,
+                "device.printhead.resolution": None,
                 "media.status": None,
-                "ezpl.print_width": "print_width",
-                "ezpl.label_length": "label_length",
                 "media.type": "media_type",
                 "media.out": None,
+                "ezpl.print_width": None,
+                "ezpl.label_length": None,
                 "odometer.total_label_count": "odometer",
             }
+            raw_vals: dict[str, str] = {}
             for var, field in sgd_map.items():
                 value = await query_sgd(printer.ip, var)
                 if value:
                     cleaned = value.strip().strip('"')
                     status[var] = cleaned
+                    raw_vals[var] = cleaned
                     if field:
                         setattr(printer, field, cleaned)
-            # Normalise media_out to bool and store
-            raw_out = status.get("media.out", "")
+
+            # Resolve DPI
+            from app.services.scanner import _parse_dpi, _dots_to_inches
+            dpi_raw = raw_vals.get("device.printhead.resolution")
+            dpi = _parse_dpi(dpi_raw) if dpi_raw else (printer.dpi or None)
+            if dpi:
+                printer.dpi = dpi
+            for sgd_var, db_field in (("ezpl.print_width", "print_width"), ("ezpl.label_length", "label_length")):
+                raw = raw_vals.get(sgd_var)
+                if raw:
+                    setattr(printer, db_field, _dots_to_inches(raw, dpi) if dpi else raw)
+
+            # Normalise media_out
+            raw_out = raw_vals.get("media.out", "")
             printer.media_out = raw_out.lower() == "yes"
             status["media_out"] = printer.media_out
             status["online"] = True

@@ -49,6 +49,7 @@ class Printer(Base):
     friendly_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     product_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     firmware: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    dpi: Mapped[int | None] = mapped_column(Integer, nullable=True)
     print_width: Mapped[str | None] = mapped_column(String(50), nullable=True)
     label_length: Mapped[str | None] = mapped_column(String(50), nullable=True)
     media_type: Mapped[str | None] = mapped_column(String(50), nullable=True)

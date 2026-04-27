@@ -10,6 +10,7 @@ class PrinterOut(BaseModel):
     friendly_name: str | None = None
     product_name: str | None = None
     firmware: str | None = None
+    dpi: int | None = None
     print_width: str | None = None
     label_length: str | None = None
     media_type: str | None = None

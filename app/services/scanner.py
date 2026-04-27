@@ -9,6 +9,36 @@ from app.config import get_settings
 from app.services.printer_io import query_sgd, query_zpl
 
 
+def _parse_dpi(raw: str) -> int | None:
+    """Parse DPI from Zebra's device.printhead.resolution response.
+
+    Zebra returns values like '8 dpmm', '12 dpmm', or plain integers.
+    8 dpmm = 203 dpi, 12 dpmm = 300 dpi, 24 dpmm = 600 dpi.
+    """
+    raw = raw.strip().strip('"').lower()
+    dpmm_match = re.search(r"(\d+)\s*dpmm", raw)
+    if dpmm_match:
+        return round(int(dpmm_match.group(1)) * 25.4)
+    # Some printers return plain dpi number
+    dpi_match = re.search(r"(\d+)", raw)
+    if dpi_match:
+        val = int(dpi_match.group(1))
+        # dpmm values (6-24) need converting; dpi values are >100
+        if val <= 24:
+            return round(val * 25.4)
+        return val
+    return None
+
+
+def _dots_to_inches(dots_raw: str, dpi: int) -> str:
+    """Convert a raw dot-count string to a rounded inches string, e.g. '1205' → '5.9 in'."""
+    try:
+        dots = int(dots_raw.strip().strip('"'))
+        return f"{dots / dpi:.1f} in"
+    except (ValueError, ZeroDivisionError):
+        return dots_raw
+
+
 def get_local_subnets() -> list[str]:
     subnets: set[str] = set()
     for command in (["ip", "addr"], ["ifconfig"]):
@@ -76,8 +106,9 @@ async def fingerprint_printer(ip: str, ports_open: list[int]) -> dict:
     for var, field in {
         "device.friendly_name": "friendly_name",
         "device.product_name": "product_name",
-        "ezpl.print_width": "print_width",
-        "ezpl.label_length": "label_length",
+        "device.printhead.resolution": "_dpi_raw",
+        "ezpl.print_width": "_print_width_raw",
+        "ezpl.label_length": "_label_length_raw",
         "media.type": "media_type",
         "media.out": "_media_out_raw",
         "odometer.total_label_count": "odometer",
@@ -88,6 +119,17 @@ async def fingerprint_printer(ip: str, ports_open: list[int]) -> dict:
                 info[field] = value.strip().strip('"')
         except Exception:
             pass
+
+    # Resolve DPI first so we can convert dots
+    dpi_raw = info.pop("_dpi_raw", None)
+    dpi = _parse_dpi(dpi_raw) if dpi_raw else None
+    if dpi:
+        info["dpi"] = dpi
+
+    for raw_field, out_field in (("_print_width_raw", "print_width"), ("_label_length_raw", "label_length")):
+        raw = info.pop(raw_field, None)
+        if raw:
+            info[out_field] = _dots_to_inches(raw, dpi) if dpi else raw
 
     # Normalise media_out to a bool
     raw = info.pop("_media_out_raw", None)

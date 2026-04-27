@@ -58,6 +58,7 @@ _PRINTER_MIGRATIONS: list[tuple[str, str]] = [
     ("media_type",   "VARCHAR(50)"),
     ("media_out",    "BOOLEAN"),
     ("odometer",     "VARCHAR(50)"),
+    ("dpi",          "INTEGER"),
 ]
 
 
