@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Jobs</h1>
+<div class="toolbar"><form method="post" action="/admin/jobs/cleanup"><button class="secondary" type="submit">Clear Old Jobs</button></form></div>
+<table>
+  <thead><tr><th>Created</th><th>Completed</th><th>Printer</th><th>Template</th><th>Qty</th><th>Status</th><th>Error</th></tr></thead>
+  <tbody>
+  {% for job in jobs %}
+    <tr>
+      <td>{{ job.created_at }}</td><td>{{ job.completed_at or "" }}</td><td>{{ job.printer.display_name }}</td><td>{{ job.template.name }}</td><td>{{ job.quantity }}</td>
+      <td>{% if job.status == "sent" %}<span class="ok">sent</span>{% elif job.status == "failed" %}<span class="bad">failed</span>{% else %}{{ job.status }}{% endif %}</td>
+      <td>{{ job.error_message or "" }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="7" class="muted">No jobs yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

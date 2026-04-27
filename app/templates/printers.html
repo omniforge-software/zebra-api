@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Printers</h1>
+<div class="toolbar">
+  <form method="post" action="/admin/printers/scan"><button type="submit">Scan Network</button></form>
+</div>
+<table>
+  <thead><tr><th>Name</th><th>Alias</th><th>IP</th><th>Model</th><th>Firmware</th><th>Ports</th><th>Status</th><th>Actions</th></tr></thead>
+  <tbody>
+  {% for printer in printers %}
+    <tr>
+      <td>{{ printer.display_name }}</td>
+      <td>
+        <form method="post" action="/admin/printers/{{ printer.id }}/alias" class="toolbar">
+          <input name="alias" value="{{ printer.alias or '' }}" placeholder="Packing Line 1">
+          <button class="secondary" type="submit">Save</button>
+        </form>
+      </td>
+      <td><code>{{ printer.ip }}</code></td>
+      <td>{{ printer.product_name or "" }}</td>
+      <td>{{ printer.firmware or "" }}</td>
+      <td>{{ printer.ports_open }}</td>
+      <td>{% if printer.is_online %}<span class="ok">online</span>{% else %}<span class="bad">offline</span>{% endif %}</td>
+      <td><form method="post" action="/admin/printers/{{ printer.id }}/status"><button class="secondary" type="submit">Refresh</button></form></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="8" class="muted">No printers found yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

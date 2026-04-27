@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Settings</h1>
+<table>
+  <thead><tr><th>Setting</th><th>Value</th></tr></thead>
+  <tbody>
+    <tr><td>Scan subnets</td><td>{{ settings.scan_subnet_list or "auto-detect" }}</td></tr>
+    <tr><td>Scan on startup</td><td>{{ settings.scan_on_startup }}</td></tr>
+    <tr><td>Scan ports</td><td>{{ settings.scan_port_list }}</td></tr>
+    <tr><td>Printer socket port</td><td>{{ settings.printer_port }}</td></tr>
+    <tr><td>Connect timeout</td><td>{{ settings.printer_connect_timeout_seconds }}s</td></tr>
+    <tr><td>Write timeout</td><td>{{ settings.printer_write_timeout_seconds }}s</td></tr>
+    <tr><td>Status stale after</td><td>{{ settings.status_stale_after_seconds }}s</td></tr>
+    <tr><td>Job retention</td><td>{{ settings.job_retention_days }} days</td></tr>
+    <tr><td>Max quantity</td><td>{{ settings.max_print_quantity }}</td></tr>
+    <tr><td>Max ZPL bytes</td><td>{{ settings.max_zpl_bytes }}</td></tr>
+  </tbody>
+</table>
+{% endblock %}

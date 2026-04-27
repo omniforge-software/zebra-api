@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>API Keys</h1>
+{% if raw_key %}<div class="secret"><strong>New key:</strong> {{ raw_key }}</div>{% endif %}
+<section class="panel" style="margin:14px 0">
+  <form method="post" action="/admin/keys" class="toolbar">
+    <input name="name" required placeholder="warehouse-service">
+    <button type="submit">Create Key</button>
+  </form>
+</section>
+<table>
+  <thead><tr><th>Name</th><th>Prefix</th><th>Created</th><th>Last Used</th><th>Status</th><th>Action</th></tr></thead>
+  <tbody>
+  {% for key in keys %}
+    <tr>
+      <td>{{ key.name }}</td><td><code>{{ key.prefix }}</code></td><td>{{ key.created_at }}</td><td>{{ key.last_used_at or "" }}</td>
+      <td>{% if key.is_active %}<span class="ok">active</span>{% else %}<span class="bad">revoked</span>{% endif %}</td>
+      <td>{% if key.is_active %}<form method="post" action="/admin/keys/{{ key.id }}/revoke"><button class="danger" type="submit">Revoke</button></form>{% endif %}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="muted">No API keys yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,9 @@
+services:
+  zebra-api:
+    build: .
+    container_name: zebra-api
+    network_mode: host
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

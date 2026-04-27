@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Templates</h1>
+{% if error %}<div class="panel bad">{{ error }}</div>{% endif %}
+<div class="split">
+  <section>
+    <table>
+      <thead><tr><th>Name</th><th>Variables</th><th>Test Print</th><th>Delete</th></tr></thead>
+      <tbody>
+      {% for template in templates %}
+        <tr>
+          <td><strong>{{ template.name }}</strong><br><span class="muted">{{ template.description or "" }}</span></td>
+          <td>{{ template.variables }}</td>
+          <td>
+            <form method="post" action="/admin/templates/{{ template.id }}/test-print" class="toolbar">
+              <select name="printer_id" required>
+                {% for printer in printers %}<option value="{{ printer.id }}">{{ printer.display_name }}</option>{% endfor %}
+              </select>
+              <input name="quantity" type="number" value="1" min="1" max="100" style="max-width:90px">
+              <button class="secondary" type="submit">Test</button>
+            </form>
+          </td>
+          <td><form method="post" action="/admin/templates/{{ template.id }}/delete"><button class="danger" type="submit">Delete</button></form></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" class="muted">No templates yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  <section class="panel">
+    <h2>Create Template</h2>
+    <form method="post" action="/admin/templates">
+      <label for="name">Name</label>
+      <input id="name" name="name" required placeholder="ops-test-label">
+      <label for="description">Description</label>
+      <input id="description" name="description" placeholder="Short internal note">
+      <label for="zpl_body">ZPL</label>
+      <textarea id="zpl_body" name="zpl_body" required>^XA
+^CF0,35
+^FO30,40^FD{{ title }}^FS
+^FO30,90^FD{{ message }}^FS
+^XZ</textarea>
+      <button type="submit">Create Template</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

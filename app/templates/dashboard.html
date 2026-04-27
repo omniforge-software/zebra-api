@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Dashboard</h1>
+<section class="grid">
+  <div class="card"><h2>{{ stats.printers }}</h2><div class="muted">Printers</div></div>
+  <div class="card"><h2>{{ stats.online }}</h2><div class="muted">Online</div></div>
+  <div class="card"><h2>{{ stats.templates }}</h2><div class="muted">Templates</div></div>
+  <div class="card"><h2>{{ stats.jobs }}</h2><div class="muted">Jobs retained</div></div>
+  <div class="card"><h2>{{ stats.failed }}</h2><div class="muted">Failed jobs</div></div>
+</section>
+<h2 style="margin-top:24px">Recent Jobs</h2>
+<table>
+  <thead><tr><th>Created</th><th>Printer</th><th>Template</th><th>Qty</th><th>Status</th><th>Error</th></tr></thead>
+  <tbody>
+  {% for job in jobs %}
+    <tr><td>{{ job.created_at }}</td><td>{{ job.printer.display_name }}</td><td>{{ job.template.name }}</td><td>{{ job.quantity }}</td><td>{{ job.status }}</td><td>{{ job.error_message or "" }}</td></tr>
+  {% else %}
+    <tr><td colspan="6" class="muted">No jobs yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
