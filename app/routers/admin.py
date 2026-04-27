@@ -2,8 +2,9 @@ import asyncio
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -14,7 +15,7 @@ from app.models.db import AdminUser, ApiKey, LabelTemplate, PrintJob, Printer
 from app.security import create_admin_token, create_api_key, hash_secret, verify_secret
 from app.services.jobs import cleanup_old_jobs, create_job, process_print_job, refresh_printer_status, upsert_printers
 from app.services.scanner import scan_all
-from app.services.zpl_render import extract_variables, validate_zpl
+from app.services.zpl_render import extract_variables, render_zpl, validate_zpl
 
 router = APIRouter(tags=["admin"])
 templates = Jinja2Templates(directory="app/templates")
@@ -131,6 +132,25 @@ def delete_template(template_id: str, _: AdminUser = Depends(get_admin_user), db
         db.delete(template)
         db.commit()
     return RedirectResponse("/admin/templates", status_code=303)
+
+
+class _PreviewRequest(BaseModel):
+    zpl_body: str
+    variables: dict[str, str] = {}
+
+
+@router.post("/admin/templates/preview")
+def preview_template(body: _PreviewRequest, _: AdminUser = Depends(get_admin_user)):
+    """Render a ZPL template with supplied variables and return the result as JSON.
+    Used by the admin UI preview panel."""
+    try:
+        declared = extract_variables(body.zpl_body)
+        # Fill any missing variables with a blank string so preview always renders
+        values = {v: body.variables.get(v, "") for v in declared}
+        rendered_bytes = render_zpl(body.zpl_body, declared, values, quantity=1)
+        return JSONResponse({"rendered": rendered_bytes.decode("utf-8"), "error": None})
+    except ValueError as exc:
+        return JSONResponse({"rendered": None, "error": str(exc)})
 
 
 @router.post("/admin/templates/{template_id}/test-print")
