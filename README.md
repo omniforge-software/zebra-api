@@ -74,42 +74,159 @@ API keys are created through the admin UI at `/admin/keys`.
 
 ## REST Endpoints
 
-### Printers
+All endpoints require the header:
+```
+Authorization: Bearer zebra_<your-api-key>
+```
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/printers` | List all known printers |
-| `GET` | `/printers/{id}/status` | Refresh and return live status for a printer |
-| `POST` | `/printers/scan` | Trigger a new subnet scan |
+---
 
-### Templates
+### `GET /printers`
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/templates` | List all label templates |
+Returns all known printers.
 
-### Print Jobs
+**Response `200`**
+```json
+[
+  {
+    "id": "a1b2c3d4-...",
+    "ip": "192.168.1.101",
+    "alias": "warehouse-1",
+    "friendly_name": "ZT411",
+    "product_name": "ZT41143",
+    "firmware": "V75.20.01Z",
+    "print_width": "4.0 in",
+    "ports_open": [9100, 80],
+    "is_online": true
+  }
+]
+```
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/print` | Submit a print job (returns 202 + job object) |
-| `GET` | `/jobs/{id}` | Poll a job for its current status |
+---
 
-#### `POST /print` request body
+### `GET /printers/{id}/status`
 
+Refreshes and returns the live status for a single printer (opens a socket to query the device).
+
+**Path param:** `id` — printer UUID
+
+**Response `200`**
 ```json
 {
-  "printer_id": "abc123",
-  "template_id": "def456",
+  "id": "a1b2c3d4-...",
+  "ip": "192.168.1.101",
+  "alias": "warehouse-1",
+  "friendly_name": "ZT411",
+  "product_name": "ZT41143",
+  "firmware": "V75.20.01Z",
+  "print_width": "4.0 in",
+  "ports_open": [9100, 80],
+  "is_online": true
+}
+```
+
+**Response `404`** — printer ID not found.
+
+---
+
+### `POST /printers/scan`
+
+Triggers a fresh subnet scan (uses `SCAN_SUBNETS` from config). Discovered printers are upserted into the database.
+
+**No request body.**
+
+**Response `200`**
+```json
+{
+  "found": 4,
+  "saved": 2
+}
+```
+
+`found` = total devices responding, `saved` = new or updated records written.
+
+---
+
+### `GET /templates`
+
+Returns all label templates.
+
+**Response `200`**
+```json
+[
+  {
+    "id": "e5f6g7h8-...",
+    "name": "Product Label",
+    "description": "Standard product SKU label",
+    "variables": ["sku", "description", "barcode"]
+  }
+]
+```
+
+`variables` is the list of `{{placeholder}}` names found in the ZPL body.
+
+---
+
+### `POST /print`
+
+Submits a print job. The job is queued immediately and sent to the printer asynchronously.
+
+**Request body**
+```json
+{
+  "printer_id": "a1b2c3d4-...",
+  "template_id": "e5f6g7h8-...",
   "variables": {
     "sku": "WIDGET-001",
-    "qty": "5"
+    "description": "Blue Widget",
+    "barcode": "123456789"
   },
   "quantity": 2
 }
 ```
 
-`quantity` controls the `^PQ` count injected into the ZPL (how many copies the printer cuts).
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `printer_id` | string (UUID) | Yes | ID of the target printer |
+| `template_id` | string (UUID) | Yes | ID of the label template to use |
+| `variables` | object | No | Key/value pairs to substitute into the template. Defaults to `{}` |
+| `quantity` | integer ≥ 1 | No | Number of copies (`^PQ` injected into ZPL). Defaults to `1`, max `MAX_PRINT_QUANTITY` |
+
+**Response `202`** — job accepted
+```json
+{
+  "id": "j9k0l1m2-...",
+  "printer_id": "a1b2c3d4-...",
+  "template_id": "e5f6g7h8-...",
+  "quantity": 2,
+  "status": "pending",
+  "error_message": null
+}
+```
+
+**Response `400`** — unknown printer or template ID.
+
+---
+
+### `GET /jobs/{id}`
+
+Polls the status of a previously submitted print job.
+
+**Path param:** `id` — job UUID (returned by `POST /print`)
+
+**Response `200`**
+```json
+{
+  "id": "j9k0l1m2-...",
+  "printer_id": "a1b2c3d4-...",
+  "template_id": "e5f6g7h8-...",
+  "quantity": 2,
+  "status": "completed",
+  "error_message": null
+}
+```
+
+**Response `404`** — job ID not found.
 
 #### Job status values
 
@@ -118,7 +235,7 @@ API keys are created through the admin UI at `/admin/keys`.
 | `pending` | Queued, not yet sent |
 | `processing` | Currently sending to printer |
 | `completed` | Sent successfully |
-| `failed` | Print failed; see `error_message` |
+| `failed` | Send failed — see `error_message` for detail |
 
 ---
 
