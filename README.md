@@ -29,6 +29,12 @@ A self-hosted REST API for sending ZPL print jobs to Zebra label printers over t
 cp .env.example .env
 ```
 
+Edit `.env` with your subnets and any non-sensitive settings.
+
+### 2. Set secrets in the Docker Compose override
+
+Docker Compose treats `$` in `env_file:` values as variable substitution markers, which corrupts bcrypt hashes (they contain multiple `$` characters). To avoid this, secrets go in a gitignored override file instead.
+
 Generate a secret key:
 ```bash
 python -c "import secrets; print(secrets.token_hex(32))"
@@ -39,21 +45,24 @@ Hash your admin password (or auto-generate one):
 python -m app.security
 ```
 
-You'll be prompted to enter a password, or just press **Enter** to have one generated for you. Either way the script prints the `ADMIN_PASSWORD_HASH=...` line ready to paste into `.env`.
-
-Paste both values into `.env`:
-```env
-SECRET_KEY=<your-generated-key>
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD_HASH=<output-from-above>
-SCAN_SUBNETS=192.168.1.0/24
+Then create `docker-compose.override.yml` (it is gitignored — never committed):
+```yaml
+services:
+  zebra-api:
+    environment:
+      SECRET_KEY: "your-secret-key-here"
+      ADMIN_PASSWORD_HASH: "$$2b$$12$$rest-of-your-hash"
 ```
 
-### 2. Run with Docker Compose
+> **Important:** replace every `$` in the hash with `$$` in this file. Docker Compose unescapes `$$` → `$` before passing the value to the container, so the hash arrives intact.
+
+### 3. Run with Docker Compose
 
 ```bash
 docker compose up -d
 ```
+
+Compose automatically merges `docker-compose.override.yml` — no extra flags needed.
 
 The API listens on `http://<host>:8000`.  
 The admin UI is at `http://<host>:8000/admin`.
@@ -247,7 +256,7 @@ All settings are read from `.env` (or environment variables).
 |----------|---------|-------------|
 | `SECRET_KEY` | — | **Required.** Min 32 chars. Used to sign admin session JWTs — never exposed to API clients. Keep it secret; rotate it to invalidate all active admin sessions. |
 | `ADMIN_USERNAME` | `admin` | Admin login username |
-| `ADMIN_PASSWORD_HASH` | — | **Required.** bcrypt hash of the admin password |
+| `ADMIN_PASSWORD_HASH` | — | **Required.** bcrypt hash of the admin password. Set in `docker-compose.override.yml` with `$` escaped as `$$` |
 | `ADMIN_JWT_MINUTES` | `480` | Admin session cookie lifetime (minutes) |
 | `COOKIE_SECURE` | `false` | Set `true` in production behind HTTPS |
 | `SCAN_SUBNETS` | `` | Comma-separated CIDR ranges to scan, e.g. `192.168.1.0/24` |
