@@ -4,6 +4,7 @@ import logging
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import or_, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -61,7 +62,19 @@ def require_api_key(
             api_key.last_used_at = datetime.now(timezone.utc)
             if api_key.prefix is None:
                 api_key.prefix = prefix  # backfill once
-            db.commit()
+            try:
+                db.commit()
+            except SQLAlchemyError as exc:
+                db.rollback()
+                # Do not fail the request if audit metadata writeback races.
+                logger.warning(
+                    "api_key_auth_writeback_failed key_name=%s path=%s method=%s client=%s error=%s",
+                    key_name,
+                    request.url.path,
+                    request.method,
+                    request.client.host if request.client else "unknown",
+                    str(exc),
+                )
             logger.info(
                 "api_key_auth_success key_name=%s path=%s method=%s client=%s",
                 key_name,

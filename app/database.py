@@ -13,12 +13,20 @@ class Base(DeclarativeBase):
 
 settings = get_settings()
 _is_sqlite = settings.database_url.startswith("sqlite")
+_is_sqlite_memory = _is_sqlite and ":memory:" in settings.database_url
 
-if _is_sqlite:
+if _is_sqlite_memory:
     engine = create_engine(
         settings.database_url,
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
+    )
+elif _is_sqlite:
+    # File-backed SQLite should use the default QueuePool so concurrent
+    # requests do not contend on a single shared connection.
+    engine = create_engine(
+        settings.database_url,
+        connect_args={"check_same_thread": False},
     )
 else:
     engine = create_engine(settings.database_url, pool_size=5)
