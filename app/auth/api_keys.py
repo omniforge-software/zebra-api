@@ -57,13 +57,14 @@ def require_api_key(
 
     for api_key in keys:
         if verify_secret(raw_key, api_key.key_hash):
+            key_name = api_key.name
             api_key.last_used_at = datetime.now(timezone.utc)
             if api_key.prefix is None:
                 api_key.prefix = prefix  # backfill once
             db.commit()
             logger.info(
                 "api_key_auth_success key_name=%s path=%s method=%s client=%s",
-                api_key.name,
+                key_name,
                 request.url.path,
                 request.method,
                 request.client.host if request.client else "unknown",
