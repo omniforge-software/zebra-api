@@ -12,8 +12,9 @@
       <th>IP</th>
       <th>Model</th>
       <th>Firmware</th>
-      <th>Print Width</th>
-      <th>Label Length</th>
+      <th>Resolution</th>
+      <th>Print Width (mm)</th>
+      <th>Label Length (mm)</th>
       <th>Media Type</th>
       <th>Media</th>
       <th>Odometer</th>
@@ -32,8 +33,14 @@
         </form>
       </td>
       <td><code>{{ printer.ip }}</code></td>
-      <td>{{ printer.product_name or "" }}</td>
+      <td>
+        <div>{{ printer.product_name or "—" }}</div>
+        {% if printer.friendly_name and printer.friendly_name != printer.product_name %}
+          <small class="muted">{{ printer.friendly_name }}</small>
+        {% endif %}
+      </td>
       <td>{{ printer.firmware or "" }}</td>
+      <td>{% if printer.dpi %}{{ printer.dpi }} dpi{% else %}—{% endif %}</td>
       <td>{{ printer.print_width or "—" }}</td>
       <td>{{ printer.label_length or "—" }}</td>
       <td>{{ printer.media_type or "—" }}</td>
@@ -55,7 +62,7 @@
       </td>
     </tr>
   {% else %}
-    <tr><td colspan="12" class="muted">No printers found yet.</td></tr>
+    <tr><td colspan="13" class="muted">No printers found yet.</td></tr>
   {% endfor %}
   </tbody>
 </table>

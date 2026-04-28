@@ -30,13 +30,26 @@ def _parse_dpi(raw: str) -> int | None:
     return None
 
 
-def _dots_to_inches(dots_raw: str, dpi: int) -> str:
-    """Convert a raw dot-count string to a rounded inches string, e.g. '1205' → '5.9 in'."""
+def _dots_to_mm(dots_raw: str, dpi: int) -> str:
+    """Convert a raw dot-count string to millimeters, e.g. '1205' → '150.6 mm'."""
     try:
         dots = int(dots_raw.strip().strip('"'))
-        return f"{dots / dpi:.1f} in"
+        return f"{(dots / dpi) * 25.4:.1f} mm"
     except (ValueError, ZeroDivisionError):
         return dots_raw
+
+
+def _resolve_dpi(dpi_raw: str | None, dpmm_raw: str | None, current_dpi: int | None = None) -> int | None:
+    """Resolve DPI from common Zebra SGD responses with sensible fallback order."""
+    if dpi_raw:
+        parsed = _parse_dpi(dpi_raw)
+        if parsed:
+            return parsed
+    if dpmm_raw:
+        parsed = _parse_dpi(dpmm_raw)
+        if parsed:
+            return parsed
+    return current_dpi
 
 
 def get_local_subnets() -> list[str]:
@@ -107,6 +120,7 @@ async def fingerprint_printer(ip: str, ports_open: list[int]) -> dict:
         "device.friendly_name": "friendly_name",
         "device.product_name": "product_name",
         "device.printhead.resolution": "_dpi_raw",
+        "zpl.dots_per_mm": "_dpmm_raw",
         "ezpl.print_width": "_print_width_raw",
         "ezpl.label_length": "_label_length_raw",
         "media.type": "media_type",
@@ -122,14 +136,19 @@ async def fingerprint_printer(ip: str, ports_open: list[int]) -> dict:
 
     # Resolve DPI first so we can convert dots
     dpi_raw = info.pop("_dpi_raw", None)
-    dpi = _parse_dpi(dpi_raw) if dpi_raw else None
+    dpmm_raw = info.pop("_dpmm_raw", None)
+    dpi = _resolve_dpi(dpi_raw, dpmm_raw)
     if dpi:
         info["dpi"] = dpi
+    if dpi_raw:
+        info["resolution"] = dpi_raw
+    elif dpi:
+        info["resolution"] = f"{dpi} dpi"
 
     for raw_field, out_field in (("_print_width_raw", "print_width"), ("_label_length_raw", "label_length")):
         raw = info.pop(raw_field, None)
         if raw:
-            info[out_field] = _dots_to_inches(raw, dpi) if dpi else raw
+            info[out_field] = _dots_to_mm(raw, dpi) if dpi else raw
 
     # Normalise media_out to a bool
     raw = info.pop("_media_out_raw", None)

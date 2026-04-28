@@ -55,6 +55,7 @@ async def refresh_printer_status(printer_id: str) -> dict:
                 "device.friendly_name": "friendly_name",
                 "device.status": None,
                 "device.printhead.resolution": None,
+                "zpl.dots_per_mm": None,
                 "media.status": None,
                 "media.type": "media_type",
                 "media.out": None,
@@ -73,15 +74,16 @@ async def refresh_printer_status(printer_id: str) -> dict:
                         setattr(printer, field, cleaned)
 
             # Resolve DPI
-            from app.services.scanner import _parse_dpi, _dots_to_inches
+            from app.services.scanner import _dots_to_mm, _resolve_dpi
             dpi_raw = raw_vals.get("device.printhead.resolution")
-            dpi = _parse_dpi(dpi_raw) if dpi_raw else (printer.dpi or None)
+            dpmm_raw = raw_vals.get("zpl.dots_per_mm")
+            dpi = _resolve_dpi(dpi_raw, dpmm_raw, printer.dpi)
             if dpi:
                 printer.dpi = dpi
             for sgd_var, db_field in (("ezpl.print_width", "print_width"), ("ezpl.label_length", "label_length")):
                 raw = raw_vals.get(sgd_var)
                 if raw:
-                    setattr(printer, db_field, _dots_to_inches(raw, dpi) if dpi else raw)
+                    setattr(printer, db_field, _dots_to_mm(raw, dpi) if dpi else raw)
 
             # Normalise media_out
             raw_out = raw_vals.get("media.out", "")
@@ -149,7 +151,12 @@ def upsert_printers(printers: list[dict]) -> int:
                 "friendly_name",
                 "product_name",
                 "firmware",
+                "dpi",
                 "print_width",
+                "label_length",
+                "media_type",
+                "media_out",
+                "odometer",
                 "ports_open",
                 "is_online",
                 "last_seen_at",
