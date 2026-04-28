@@ -92,11 +92,19 @@ async def admin_refresh_status(printer_id: str, _: AdminUser = Depends(get_admin
 
 
 @router.get("/admin/templates", response_class=HTMLResponse)
-def templates_page(request: Request, _: AdminUser = Depends(get_admin_user), db: Session = Depends(get_db)):
+def templates_page(
+    request: Request,
+    edit: str | None = None,
+    _: AdminUser = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
     label_templates = db.scalars(select(LabelTemplate).order_by(LabelTemplate.name)).all()
     printers = db.scalars(select(Printer).order_by(Printer.alias, Printer.friendly_name, Printer.ip)).all()
+    edit_template = db.get(LabelTemplate, edit) if edit else None
     return templates.TemplateResponse(
-        request, "templates.html", {"templates": label_templates, "printers": printers, "error": None}
+        request,
+        "templates.html",
+        {"templates": label_templates, "printers": printers, "error": None, "edit_template": edit_template},
     )
 
 
@@ -117,10 +125,48 @@ def create_template(
         return templates.TemplateResponse(
             request,
             "templates.html",
-            {"templates": label_templates, "printers": printers, "error": str(exc)},
+            {"templates": label_templates, "printers": printers, "error": str(exc), "edit_template": None},
             status_code=400,
         )
     db.add(LabelTemplate(name=name.strip(), description=description.strip() or None, zpl_body=zpl_body, variables=extract_variables(zpl_body)))
+    db.commit()
+    return RedirectResponse("/admin/templates", status_code=303)
+
+
+@router.post("/admin/templates/{template_id}")
+def update_template(
+    template_id: str,
+    request: Request,
+    name: str = Form(...),
+    description: str = Form(""),
+    zpl_body: str = Form(...),
+    _: AdminUser = Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    template = db.get(LabelTemplate, template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    try:
+        validate_zpl(zpl_body)
+    except ValueError as exc:
+        label_templates = db.scalars(select(LabelTemplate).order_by(LabelTemplate.name)).all()
+        printers = db.scalars(select(Printer).order_by(Printer.alias, Printer.friendly_name, Printer.ip)).all()
+        template.name = name.strip()
+        template.description = description.strip() or None
+        template.zpl_body = zpl_body
+        template.variables = extract_variables(zpl_body)
+        return templates.TemplateResponse(
+            request,
+            "templates.html",
+            {"templates": label_templates, "printers": printers, "error": str(exc), "edit_template": template},
+            status_code=400,
+        )
+
+    template.name = name.strip()
+    template.description = description.strip() or None
+    template.zpl_body = zpl_body
+    template.variables = extract_variables(zpl_body)
     db.commit()
     return RedirectResponse("/admin/templates", status_code=303)
 

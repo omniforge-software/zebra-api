@@ -5,7 +5,7 @@
 <div class="split">
   <section>
     <table>
-      <thead><tr><th>Name</th><th>Variables</th><th>Test Print</th><th>Delete</th></tr></thead>
+      <thead><tr><th>Name</th><th>Variables</th><th>Test Print</th><th>Edit</th><th>Delete</th></tr></thead>
       <tbody>
       {% for template in templates %}
         <tr>
@@ -20,10 +20,13 @@
               <button class="secondary" type="submit">Test</button>
             </form>
           </td>
+          <td>
+            <a class="button secondary" href="/admin/templates?edit={{ template.id }}">Edit</a>
+          </td>
           <td><form method="post" action="/admin/templates/{{ template.id }}/delete"><button class="danger" type="submit">Delete</button></form></td>
         </tr>
       {% else %}
-        <tr><td colspan="4" class="muted">No templates yet.</td></tr>
+        <tr><td colspan="5" class="muted">No templates yet.</td></tr>
       {% endfor %}
       </tbody>
     </table>
@@ -31,19 +34,22 @@
 
   <section>
     <div class="panel" style="margin-bottom:16px">
-      <h2>Create Template</h2>
-      <form method="post" action="/admin/templates" id="create-form">
+      <h2>{% if edit_template %}Edit Template{% else %}Create Template{% endif %}</h2>
+      <form method="post" action="{% if edit_template %}/admin/templates/{{ edit_template.id }}{% else %}/admin/templates{% endif %}" id="template-form">
         <label for="name">Name</label>
-        <input id="name" name="name" required placeholder="ops-test-label">
+        <input id="name" name="name" required placeholder="ops-test-label" value="{{ edit_template.name if edit_template else '' }}">
         <label for="description">Description</label>
-        <input id="description" name="description" placeholder="Short internal note">
+        <input id="description" name="description" placeholder="Short internal note" value="{{ edit_template.description if edit_template else '' }}">
         <label for="zpl_body">ZPL</label>
-        <textarea id="zpl_body" name="zpl_body" required>^XA
+        <textarea id="zpl_body" name="zpl_body" required>{% if edit_template %}{{ edit_template.zpl_body }}{% else %}^XA
 ^CF0,35
 ^FO30,40^FD{{title}}^FS
 ^FO30,90^FD{{message}}^FS
-^XZ</textarea>
-        <button type="submit">Create Template</button>
+^XZ{% endif %}</textarea>
+        <button type="submit">{% if edit_template %}Save Changes{% else %}Create Template{% endif %}</button>
+        {% if edit_template %}
+          <a class="button secondary" href="/admin/templates" style="margin-left:8px">Cancel</a>
+        {% endif %}
         <button type="button" class="secondary" id="preview-btn" style="margin-left:8px">Preview</button>
       </form>
     </div>
