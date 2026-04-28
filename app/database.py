@@ -61,15 +61,29 @@ _PRINTER_MIGRATIONS: list[tuple[str, str]] = [
     ("dpi",          "INTEGER"),
 ]
 
+_API_KEY_MIGRATIONS: list[tuple[str, str]] = [
+    ("prefix",       "VARCHAR(16)"),
+    ("last_used_at", "DATETIME"),
+]
+
 
 def _migrate(eng) -> None:
     """Apply additive schema changes that create_all won't handle."""
     with eng.connect() as conn:
-        existing = {
+        existing_printers = {
             row[1]
             for row in conn.exec_driver_sql("PRAGMA table_info(printers)").fetchall()
         }
         for col, col_type in _PRINTER_MIGRATIONS:
-            if col not in existing:
+            if col not in existing_printers:
                 conn.exec_driver_sql(f"ALTER TABLE printers ADD COLUMN {col} {col_type}")
+
+        existing_keys = {
+            row[1]
+            for row in conn.exec_driver_sql("PRAGMA table_info(api_keys)").fetchall()
+        }
+        for col, col_type in _API_KEY_MIGRATIONS:
+            if col not in existing_keys:
+                conn.exec_driver_sql(f"ALTER TABLE api_keys ADD COLUMN {col} {col_type}")
+
         conn.commit()

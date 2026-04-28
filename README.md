@@ -71,10 +71,18 @@ The admin UI is at `http://<host>:8000/admin`.
 
 ## API Authentication
 
-All REST endpoints require an `Authorization` header:
+All REST endpoints require an `Authorization` header carrying the full API key as issued by the admin UI (keys are prefixed with `zebra_`):
 
 ```
-Authorization: Bearer zebra_<your-api-key>
+Authorization: Bearer zebra_<key-suffix>
+```
+
+The complete key string — including the `zebra_` prefix — is what you pass as the Bearer token. Do **not** add an extra `zebra_` in your client code; the key shown in the admin UI is the entire value to use.
+
+For example, if the admin UI shows `zebra_AbCdEfGhIj...`, the header is:
+
+```
+Authorization: Bearer zebra_AbCdEfGhIj...
 ```
 
 API keys are created through the admin UI at `/admin/keys`.
