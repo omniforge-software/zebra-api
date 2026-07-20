@@ -103,6 +103,19 @@ class TestAdminPages:
         r = client.get("/admin/jobs")
         assert r.status_code == 200
 
+    def test_admin_test_print_schedules_job(self, client, admin_cookie, sample_printer, sample_template, monkeypatch):
+        async def skip_print(_job_id):
+            return None
+
+        monkeypatch.setattr("app.routers.admin.process_print_job", skip_print)
+        r = client.post(
+            f"/admin/templates/{sample_template.id}/test-print",
+            data={"printer_id": sample_printer.id, "quantity": 1},
+            follow_redirects=False,
+        )
+        assert r.status_code == 303
+        assert r.headers["location"] == "/admin/jobs"
+
     def test_settings_page(self, client, admin_cookie):
         r = client.get("/admin/settings")
         assert r.status_code == 200

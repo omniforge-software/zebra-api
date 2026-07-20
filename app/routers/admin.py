@@ -200,7 +200,7 @@ def preview_template(body: _PreviewRequest, _: AdminUser = Depends(get_admin_use
 
 
 @router.post("/admin/templates/{template_id}/test-print")
-def test_print(
+async def test_print(
     template_id: str,
     printer_id: str = Form(...),
     quantity: int = Form(1),
