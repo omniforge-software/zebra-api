@@ -13,7 +13,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.models.db import AdminUser, ApiKey, LabelTemplate, PrintJob, Printer
 from app.security import create_admin_token, create_api_key, hash_secret, verify_secret
-from app.services.jobs import cleanup_old_jobs, create_job, process_print_job, refresh_printer_status, upsert_printers
+from app.services.jobs import DIRECT_ZPL_TEMPLATE_ID, cleanup_old_jobs, create_job, process_print_job, refresh_printer_status, upsert_printers
 from app.services.scanner import scan_all
 from app.services.zpl_render import extract_variables, render_zpl, validate_zpl
 
@@ -143,6 +143,8 @@ def update_template(
     _: AdminUser = Depends(get_admin_user),
     db: Session = Depends(get_db),
 ):
+    if template_id == DIRECT_ZPL_TEMPLATE_ID:
+        raise HTTPException(status_code=400, detail="The Direct ZPL system template cannot be edited")
     template = db.get(LabelTemplate, template_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
@@ -173,6 +175,8 @@ def update_template(
 
 @router.post("/admin/templates/{template_id}/delete")
 def delete_template(template_id: str, _: AdminUser = Depends(get_admin_user), db: Session = Depends(get_db)):
+    if template_id == DIRECT_ZPL_TEMPLATE_ID:
+        raise HTTPException(status_code=400, detail="The Direct ZPL system template cannot be deleted")
     template = db.get(LabelTemplate, template_id)
     if template:
         db.delete(template)
@@ -207,6 +211,8 @@ async def test_print(
     _: AdminUser = Depends(get_admin_user),
     db: Session = Depends(get_db),
 ):
+    if template_id == DIRECT_ZPL_TEMPLATE_ID:
+        raise HTTPException(status_code=400, detail="Use POST /print/zpl to supply ZPL for this template")
     template = db.get(LabelTemplate, template_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")

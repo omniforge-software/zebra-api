@@ -1,13 +1,21 @@
 import asyncio
+import re
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 
 from app.config import get_settings
 from app.database import SessionLocal
 from app.models.db import LabelTemplate, PrintJob, Printer
 from app.services.printer_io import query_sgd, send_zpl
 from app.services.zpl_render import render_zpl
+
+
+# A single passthrough template keeps direct jobs compatible with the existing
+# foreign key and worker. Substitution is one pass, preserving braces in ZPL.
+DIRECT_ZPL_TEMPLATE_ID = "00000000-0000-0000-0000-000000000001"
+_DIRECT_ZPL_BODY = "{{ zpl }}"
 
 
 async def process_print_job(job_id: str) -> None:
@@ -124,7 +132,37 @@ def create_job(printer_id: str, template_id: str, variables: dict, quantity: int
     with SessionLocal() as db:
         if not db.get(Printer, printer_id):
             raise ValueError("Printer not found")
-        if not db.get(LabelTemplate, template_id):
+        template = db.get(LabelTemplate, template_id)
+        if template_id == DIRECT_ZPL_TEMPLATE_ID:
+            # Preflight before persisting either the system template or a job.
+            render_zpl(_DIRECT_ZPL_BODY, ["zpl"], variables, quantity)
+            zpl = variables["zpl"]
+            if zpl.count("^XA") != 1 or zpl.count("^XZ") != 1:
+                raise ValueError("Direct ZPL must contain exactly one ^XA/^XZ label format")
+            if zpl.count("^PQ") > 1 or (
+                "^PQ" in zpl and not re.search(r"\^PQ[0-9]+(?=[,\s^~]|$)", zpl)
+            ):
+                raise ValueError("Direct ZPL may contain at most one ^PQ with a numeric quantity")
+            if template is None:
+                try:
+                    # A concurrent first request may create the same row.
+                    with db.begin_nested():
+                        template = LabelTemplate(
+                            id=DIRECT_ZPL_TEMPLATE_ID,
+                            name="Direct ZPL (system)",
+                            description="Managed automatically for POST /print/zpl.",
+                            zpl_body=_DIRECT_ZPL_BODY,
+                            variables=["zpl"],
+                        )
+                        db.add(template)
+                        db.flush()
+                except IntegrityError:
+                    template = db.get(LabelTemplate, DIRECT_ZPL_TEMPLATE_ID)
+                    if template is None:
+                        raise ValueError("The template name 'Direct ZPL (system)' is reserved") from None
+            if template.zpl_body != _DIRECT_ZPL_BODY or template.variables != ["zpl"]:
+                raise ValueError("The Direct ZPL system template has been modified")
+        if template is None:
             raise ValueError("Template not found")
         job = PrintJob(
             printer_id=printer_id,

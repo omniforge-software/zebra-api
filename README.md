@@ -8,6 +8,7 @@ A self-hosted REST API for sending ZPL print jobs to Zebra label printers over t
 
 - **Print jobs** — send ZPL label templates to any registered Zebra printer; jobs are queued asynchronously and return a job ID immediately (HTTP 202)
 - **ZPL templates** — store and manage named ZPL templates with variable substitution (`{{variable}}`) and automatic `^PQ` quantity injection
+- **Direct ZPL** — submit fully rendered labels to `POST /print/zpl`, including dynamic lists of rows, without creating a template yourself
 - **Printer discovery** — subnet scan on startup (and on demand) finds Zebra printers automatically; per-printer connection locking prevents send collisions
 - **API key auth** — all REST endpoints require a bearer API key; keys are hashed in the database and prefixed with `zebra_`
 - **Admin UI** — browser-based dashboard (cookie + JWT session) for:
@@ -181,6 +182,8 @@ Returns all label templates.
 ```
 
 `variables` is the list of `{{placeholder}}` names found in the ZPL body.
+After the first direct-ZPL submission, this list also includes the protected
+**Direct ZPL (system)** template used internally by `POST /print/zpl`.
 
 ---
 
@@ -225,11 +228,69 @@ Submits a print job. The job is queued immediately and sent to the printer async
 
 ---
 
+### `POST /print/zpl`
+
+Submits fully rendered ZPL without requiring you to create or select a template.
+Generate repeated rows or other dynamic layout in your calling application, then
+send the complete label using the same Bearer authentication as `POST /print`.
+
+**Request body** (`Content-Type: application/json`)
+
+```json
+{
+  "printer_id": "a1b2c3d4-...",
+  "zpl": "^XA\n^FO20,20^FDItem 1^FS\n^FO20,60^FDItem 2^FS\n^XZ",
+  "quantity": 2
+}
+```
+
+**Response `202`** — job accepted
+
+```json
+{
+  "id": "j9k0l1m2-...",
+  "printer_id": "a1b2c3d4-...",
+  "template_id": "00000000-0000-0000-0000-000000000001",
+  "quantity": 2,
+  "status": "pending",
+  "error_message": null
+}
+```
+
+- `printer_id` and nonempty `zpl` are required. `quantity` defaults to 1 and is
+  limited by `MAX_PRINT_QUANTITY`.
+- Supply exactly one `^XA` / `^XZ` label format. Quantity means copies of that
+  label; the existing renderer inserts `^PQ` or replaces its numeric quantity.
+  Omitting `quantity` therefore sets copies to 1 even if the ZPL contains `^PQ99`.
+  Duplicate `^PQ` commands or a missing/nonnumeric quantity are rejected.
+- Literal `{{braces}}` in the supplied ZPL are preserved. The UTF-8 payload after
+  quantity injection must fit `MAX_ZPL_BYTES` (256 KiB by default). Validation
+  checks format boundaries and these limits, not the validity of every ZPL command.
+- Returns the existing job response with HTTP `202`; poll `GET /jobs/{id}`.
+  Invalid ZPL, excessive quantity, or an unknown printer returns `400`; missing
+  fields, empty ZPL, or quantity below 1 returns `422`.
+  Missing or invalid Bearer credentials return `401`.
+
+Render lists, loops, and variable values in the caller before submission. This
+endpoint accepts a JSON string containing ZPL, not a template language or a
+`text/plain` request body. Multiple label formats require separate requests.
+
+No database schema changes are required. On first valid use, the service creates
+one protected **Direct ZPL (system)** passthrough template with ID
+`00000000-0000-0000-0000-000000000001`. This is the `template_id` returned for direct
+jobs. Each job stores its own ZPL in the existing `variables` field and uses the
+same worker, printer transport, history, and retention as template jobs. The system
+template appears in template listings and cannot be edited, deleted, or test-printed
+through the admin UI. Its name is reserved; an existing user template with that
+name must be renamed before first use.
+
+---
+
 ### `GET /jobs/{id}`
 
 Polls the status of a previously submitted print job.
 
-**Path param:** `id` — job UUID (returned by `POST /print`)
+**Path param:** `id` — job UUID (returned by `POST /print` or `POST /print/zpl`)
 
 **Response `200`**
 ```json
@@ -238,7 +299,7 @@ Polls the status of a previously submitted print job.
   "printer_id": "a1b2c3d4-...",
   "template_id": "e5f6g7h8-...",
   "quantity": 2,
-  "status": "completed",
+  "status": "sent",
   "error_message": null
 }
 ```
@@ -250,9 +311,12 @@ Polls the status of a previously submitted print job.
 | Status | Meaning |
 |--------|---------|
 | `pending` | Queued, not yet sent |
-| `processing` | Currently sending to printer |
-| `completed` | Sent successfully |
+| `sending` | Currently sending to printer |
+| `sent` | Socket send completed successfully; physical printing is not confirmed |
 | `failed` | Send failed — see `error_message` for detail |
+
+Both submission endpoints use these statuses. Processing runs in an in-process
+background task; pending jobs are not automatically resumed after an app restart.
 
 ---
 
@@ -279,7 +343,7 @@ All settings are read from `.env` (or environment variables).
 | `PRINTER_STATUS_TIMEOUT_SECONDS` | `2.0` | Status query timeout |
 | `MAX_PRINT_QUANTITY` | `100` | Maximum `^PQ` quantity accepted |
 | `MAX_ZPL_BYTES` | `262144` | Maximum ZPL payload size (256 KB) |
-| `JOB_RETENTION_DAYS` | `31` | Days before completed jobs are purged |
+| `JOB_RETENTION_DAYS` | `31` | Jobs older than this many days, measured from creation, are purged regardless of status |
 | `CLEANUP_INTERVAL_MINUTES` | `60` | How often the cleanup task runs |
 
 ---
@@ -323,11 +387,11 @@ app/
 │   └── schemas.py  Pydantic request/response schemas
 ├── routers/
 │   ├── admin.py    Admin UI routes (login, dashboard, printers, templates, keys, jobs, settings)
-│   ├── jobs.py     POST /print, GET /jobs/{id}
+│   ├── jobs.py     POST /print, POST /print/zpl, GET /jobs/{id}
 │   ├── printers.py GET /printers, POST /printers/scan
 │   └── templates.py GET /templates
 ├── services/
-│   ├── jobs.py        Job creation, async processing, printer upsert, status refresh, cleanup
+│   ├── jobs.py        Job creation (saved templates or direct ZPL), async processing, printer upsert, status refresh, cleanup
 │   ├── printer_io.py  Raw TCP socket send with per-printer asyncio lock
 │   ├── scanner.py     Async subnet scanner (concurrent TCP probing)
 │   └── zpl_render.py  Variable substitution + ^PQ injection into ZPL
@@ -336,7 +400,7 @@ app/
 ├── database.py     SQLAlchemy engine + session factory + init_db()
 ├── main.py         FastAPI app factory + lifespan (startup/shutdown)
 └── security.py     bcrypt hashing, JWT creation/verification, API key generation
-tests/              pytest test suite (59 tests, no external dependencies)
+tests/              pytest suite with isolated databases and mocked printer transport
 ```
 
 ---

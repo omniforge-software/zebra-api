@@ -36,6 +36,12 @@ class PrintRequest(BaseModel):
     quantity: int = Field(default=1, ge=1)
 
 
+class DirectPrintRequest(BaseModel):
+    printer_id: str
+    zpl: str = Field(min_length=1)
+    quantity: int = Field(default=1, ge=1)
+
+
 class PrintJobOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
